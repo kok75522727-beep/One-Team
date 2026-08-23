@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://unpkg.com/streamlit-component-lib@1.6.0/dist/streamlit.js"></script>
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
+  <style>
+    html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
+    #turnstile { min-height: 68px; display: flex; align-items: center; }
+  </style>
+</head>
+<body>
+  <div id="turnstile"></div>
+  <script>
+    let activeSiteKey = "";
+    let widgetId = null;
+
+    function renderWidget(siteKey) {
+      if (!siteKey || !window.turnstile) {
+        window.setTimeout(() => renderWidget(siteKey), 120);
+        return;
+      }
+      if (widgetId !== null && activeSiteKey === siteKey) return;
+      const holder = document.getElementById("turnstile");
+      holder.innerHTML = "";
+      activeSiteKey = siteKey;
+      widgetId = window.turnstile.render(holder, {
+        sitekey: siteKey,
+        theme: "dark",
+        size: "normal",
+        callback: (token) => Streamlit.setComponentValue(token),
+        "expired-callback": () => Streamlit.setComponentValue(""),
+        "error-callback": () => Streamlit.setComponentValue(""),
+      });
+      Streamlit.setFrameHeight(78);
+    }
+
+    Streamlit.events.addEventListener(Streamlit.RENDER_EVENT, (event) => {
+      renderWidget(event.detail.args.sitekey || "");
+    });
+    Streamlit.setComponentReady();
+    Streamlit.setFrameHeight(78);
+  </script>
+</body>
+</html>
+
