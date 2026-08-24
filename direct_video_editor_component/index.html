@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: transparent; font-family: system-ui, sans-serif; overflow: hidden; }
+    #stage { position: relative; width: 100%; overflow: hidden; border-radius: 12px; background: #0a1222; touch-action: none; user-select: none; }
+    #frame { display: block; width: 100%; height: 100%; object-fit: fill; pointer-events: none; }
+    .blur { position: absolute; border: 3px solid #66d8ff; background: rgba(79,171,255,.18); border-radius: 3px; touch-action: none; cursor: move; }
+    .blur::after { content: ''; position: absolute; right: -8px; bottom: -8px; width: 15px; height: 15px; border-radius: 50%; background: #ffd166; border: 2px solid #112; cursor: nwse-resize; }
+    #subtitle { position: absolute; max-width: 88%; padding: 3px 7px; border: 2px dashed #ffd166; border-radius: 4px; color: #ffd166; font-weight: 800; text-align: center; text-shadow: 2px 2px 2px #000,-2px -2px 2px #000; touch-action: none; cursor: move; white-space: pre-wrap; line-height: 1.22; }
+    .tag { position: absolute; left: 4px; top: 4px; padding: 2px 6px; border-radius: 8px; font-size: 10px; color: #06101a; background: #66d8ff; font-weight: 800; }
+  </style>
+</head>
+<body>
+  <div id="stage"><img id="frame" alt="Paused video frame" /></div>
+  <script>
+    const stage = document.getElementById('stage');
+    const frame = document.getElementById('frame');
+    let args = {}, active = null, lastValue = '';
+    const send = (type, data = {}) => window.parent.postMessage({ isStreamlitMessage: true, type, ...data }, '*');
+    const size = () => send('streamlit:setFrameHeight', { height: Math.max(180, Math.ceil(stage.getBoundingClientRect().height)) });
+    const ready = () => send('streamlit:componentReady', { apiVersion: 1 });
+    const clamp = (v, low, high) => Math.max(low, Math.min(high, v));
+    function serialize() {
+      const width = Number(args.width || 1), height = Number(args.height || 1);
+      const masks = [...stage.querySelectorAll('.blur')].map(el => ({
+        x: Math.round(Number(el.dataset.x || 0) * width / stage.clientWidth),
+        y: Math.round(Number(el.dataset.y || 0) * height / stage.clientHeight),
+        width: Math.round(Number(el.dataset.w || 1) * width / stage.clientWidth),
+        height: Math.round(Number(el.dataset.h || 1) * height / stage.clientHeight),
+      }));
+      const subtitle = document.getElementById('subtitle');
+      const result = { blur_masks: masks, subtitle: subtitle ? { x: Math.round((Number(subtitle.dataset.x || 0) + subtitle.offsetWidth / 2) * 100 / stage.clientWidth), y: Math.round((Number(subtitle.dataset.y || 0) + subtitle.offsetHeight / 2) * 100 / stage.clientHeight) } : null };
+      const encoded = JSON.stringify(result);
+      if (encoded !== lastValue) { lastValue = encoded; send('streamlit:setComponentValue', { value: result, dataType: 'json' }); }
+    }
+    function mountDrag(el, mode) {
+      el.addEventListener('pointerdown', event => { event.preventDefault(); el.setPointerCapture(event.pointerId); const rect = el.getBoundingClientRect(); active = { el, mode: mode === 'blur' && event.offsetX > el.clientWidth - 28 && event.offsetY > el.clientHeight - 28 ? 'resize' : 'move', startX: event.clientX, startY: event.clientY, x: Number(el.dataset.x || 0), y: Number(el.dataset.y || 0), w: Number(el.dataset.w || rect.width), h: Number(el.dataset.h || rect.height) }; });
+      el.addEventListener('pointermove', event => { if (!active || active.el !== el) return; const dx = event.clientX - active.startX, dy = event.clientY - active.startY; if (active.mode === 'resize') { el.dataset.w = clamp(active.w + dx, 24, stage.clientWidth - active.x); el.dataset.h = clamp(active.h + dy, 24, stage.clientHeight - active.y); } else { el.dataset.x = clamp(active.x + dx, 0, stage.clientWidth - el.offsetWidth); el.dataset.y = clamp(active.y + dy, 0, stage.clientHeight - el.offsetHeight); } apply(el); });
+      el.addEventListener('pointerup', () => { if (active && active.el === el) { active = null; serialize(); } });
+    }
+    function apply(el) { el.style.left = `${el.dataset.x}px`; el.style.top = `${el.dataset.y}px`; if (el.dataset.w) el.style.width = `${el.dataset.w}px`; if (el.dataset.h) el.style.height = `${el.dataset.h}px`; }
+    function blur(mask, index) { const sx = stage.clientWidth / Number(args.width || 1), sy = stage.clientHeight / Number(args.height || 1); const el = document.createElement('div'); el.className = 'blur'; el.dataset.x = Number(mask.x || 0) * sx; el.dataset.y = Number(mask.y || 0) * sy; el.dataset.w = Math.max(24, Number(mask.width || 1) * sx); el.dataset.h = Math.max(24, Number(mask.height || 1) * sy); el.innerHTML = `<span class="tag">Blur ${index + 1}</span>`; apply(el); mountDrag(el, 'blur'); stage.appendChild(el); }
+    function subtitle(data) { const el = document.createElement('div'); el.id = 'subtitle'; el.textContent = data.text || 'စာတန်းထိုး နေရာ'; el.style.color = data.color || '#FFD166'; el.style.fontSize = `${clamp(Number(data.size || 30) * stage.clientHeight / Number(args.height || 1), 14, 32)}px`; stage.appendChild(el); const x = Number(data.x || 50) * stage.clientWidth / 100; const y = Number(data.y || 78) * stage.clientHeight / 100; el.dataset.x = clamp(x - el.offsetWidth / 2, 0, stage.clientWidth - el.offsetWidth); el.dataset.y = clamp(y - el.offsetHeight / 2, 0, stage.clientHeight - el.offsetHeight); apply(el); mountDrag(el, 'subtitle'); }
+    function render(next) { args = next || {}; stage.style.width = `${args.width || 320}px`; stage.style.height = `${args.height || 320}px`; frame.src = args.image || ''; stage.querySelectorAll('.blur,#subtitle').forEach(el => el.remove()); frame.onload = () => { if (args.blur_enabled) (args.blur_masks || []).forEach(blur); if (args.subtitle_enabled) subtitle(args.subtitle || {}); size(); }; if (frame.complete) frame.onload(); }
+    window.addEventListener('message', event => { if (event.data && event.data.type === 'streamlit:render') render(event.data.args || {}); });
+    ready();
+  </script>
+</body>
+</html>
+
