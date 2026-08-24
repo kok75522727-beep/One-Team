@@ -12,20 +12,22 @@
     .blur::after { content: ''; position: absolute; right: -8px; bottom: -8px; width: 15px; height: 15px; border-radius: 50%; background: #ffd166; border: 2px solid #112; cursor: nwse-resize; }
     #subtitle { position: absolute; max-width: 88%; padding: 3px 7px; border: 2px dashed #ffd166; border-radius: 4px; color: #ffd166; font-weight: 800; text-align: center; text-shadow: 2px 2px 2px #000,-2px -2px 2px #000; touch-action: none; cursor: move; white-space: pre-wrap; line-height: 1.22; }
     .tag { position: absolute; left: 4px; top: 4px; padding: 2px 6px; border-radius: 8px; font-size: 10px; color: #06101a; background: #66d8ff; font-weight: 800; }
+    #savePos { position: absolute; right: 8px; top: 8px; z-index: 20; min-height: 32px; border: 1px solid rgba(255,255,255,.42); border-radius: 999px; padding: 5px 10px; background: rgba(7,16,31,.82); color: #e6f7ff; font-size: 12px; font-weight: 800; touch-action: manipulation; }
   </style>
 </head>
 <body>
-  <div id="stage"><img id="frame" alt="Paused video frame" /></div>
+  <div id="stage"><img id="frame" alt="Paused video frame" /><button id="savePos" type="button">Save</button></div>
   <script>
     const stage = document.getElementById('stage');
     const frame = document.getElementById('frame');
-    let args = {}, active = null, lastValue = '';
+    const savePos = document.getElementById('savePos');
+    let args = {}, active = null, lastValue = '', renderedScene = '', renderedRefresh = '', mounted = false, mountTicket = 0;
     const send = (type, data = {}) => window.parent.postMessage({ isStreamlitMessage: true, type, ...data }, '*');
     const size = () => send('streamlit:setFrameHeight', { height: Math.max(180, Math.ceil(stage.getBoundingClientRect().height)) });
     const ready = () => send('streamlit:componentReady', { apiVersion: 1 });
     const clamp = (v, low, high) => Math.max(low, Math.min(high, v));
     function serialize() {
-      const width = Number(args.width || 1), height = Number(args.height || 1);
+      const width = Number(args.source_width || args.width || 1), height = Number(args.source_height || args.height || 1);
       const masks = [...stage.querySelectorAll('.blur')].map(el => ({
         x: Math.round(Number(el.dataset.x || 0) * width / stage.clientWidth),
         y: Math.round(Number(el.dataset.y || 0) * height / stage.clientHeight),
@@ -40,12 +42,30 @@
     function mountDrag(el, mode) {
       el.addEventListener('pointerdown', event => { event.preventDefault(); el.setPointerCapture(event.pointerId); const rect = el.getBoundingClientRect(); active = { el, mode: mode === 'blur' && event.offsetX > el.clientWidth - 28 && event.offsetY > el.clientHeight - 28 ? 'resize' : 'move', startX: event.clientX, startY: event.clientY, x: Number(el.dataset.x || 0), y: Number(el.dataset.y || 0), w: Number(el.dataset.w || rect.width), h: Number(el.dataset.h || rect.height) }; });
       el.addEventListener('pointermove', event => { if (!active || active.el !== el) return; const dx = event.clientX - active.startX, dy = event.clientY - active.startY; if (active.mode === 'resize') { el.dataset.w = clamp(active.w + dx, 24, stage.clientWidth - active.x); el.dataset.h = clamp(active.h + dy, 24, stage.clientHeight - active.y); } else { el.dataset.x = clamp(active.x + dx, 0, stage.clientWidth - el.offsetWidth); el.dataset.y = clamp(active.y + dy, 0, stage.clientHeight - el.offsetHeight); } apply(el); });
-      el.addEventListener('pointerup', () => { if (active && active.el === el) { active = null; serialize(); } });
+      el.addEventListener('pointerup', () => { if (active && active.el === el) active = null; });
+      el.addEventListener('pointercancel', () => { if (active && active.el === el) active = null; });
     }
     function apply(el) { el.style.left = `${el.dataset.x}px`; el.style.top = `${el.dataset.y}px`; if (el.dataset.w) el.style.width = `${el.dataset.w}px`; if (el.dataset.h) el.style.height = `${el.dataset.h}px`; }
-    function blur(mask, index) { const sx = stage.clientWidth / Number(args.width || 1), sy = stage.clientHeight / Number(args.height || 1); const el = document.createElement('div'); el.className = 'blur'; el.dataset.x = Number(mask.x || 0) * sx; el.dataset.y = Number(mask.y || 0) * sy; el.dataset.w = Math.max(24, Number(mask.width || 1) * sx); el.dataset.h = Math.max(24, Number(mask.height || 1) * sy); el.innerHTML = `<span class="tag">Blur ${index + 1}</span>`; apply(el); mountDrag(el, 'blur'); stage.appendChild(el); }
+    function blur(mask, index) { const sx = stage.clientWidth / Number(args.source_width || args.width || 1), sy = stage.clientHeight / Number(args.source_height || args.height || 1); const el = document.createElement('div'); el.className = 'blur'; el.dataset.x = Number(mask.x || 0) * sx; el.dataset.y = Number(mask.y || 0) * sy; el.dataset.w = Math.max(24, Number(mask.width || 1) * sx); el.dataset.h = Math.max(24, Number(mask.height || 1) * sy); el.innerHTML = `<span class="tag">Blur ${index + 1}</span>`; apply(el); mountDrag(el, 'blur'); stage.appendChild(el); }
     function subtitle(data) { const el = document.createElement('div'); el.id = 'subtitle'; el.textContent = data.text || 'စာတန်းထိုး နေရာ'; el.style.color = data.color || '#FFD166'; el.style.fontSize = `${clamp(Number(data.size || 30) * stage.clientHeight / Number(args.height || 1), 14, 32)}px`; stage.appendChild(el); const x = Number(data.x || 50) * stage.clientWidth / 100; const y = Number(data.y || 78) * stage.clientHeight / 100; el.dataset.x = clamp(x - el.offsetWidth / 2, 0, stage.clientWidth - el.offsetWidth); el.dataset.y = clamp(y - el.offsetHeight / 2, 0, stage.clientHeight - el.offsetHeight); apply(el); mountDrag(el, 'subtitle'); }
-    function render(next) { args = next || {}; stage.style.width = `${args.width || 320}px`; stage.style.height = `${args.height || 320}px`; frame.src = args.image || ''; stage.querySelectorAll('.blur,#subtitle').forEach(el => el.remove()); frame.onload = () => { if (args.blur_enabled) (args.blur_masks || []).forEach(blur); if (args.subtitle_enabled) subtitle(args.subtitle || {}); size(); }; if (frame.complete) frame.onload(); }
+    function mountOverlays(ticket) { if (ticket !== mountTicket) return; stage.querySelectorAll('.blur,#subtitle').forEach(el => el.remove()); if (args.blur_enabled) (args.blur_masks || []).forEach(blur); if (args.subtitle_enabled) subtitle(args.subtitle || {}); mounted = true; size(); }
+    function render(next) {
+      const incoming = next || {};
+      const scene = String(incoming.scene_key || '');
+      const refresh = String(incoming.refresh_token || '0');
+      const needsRemount = !mounted || scene !== renderedScene || refresh !== renderedRefresh;
+      if (!needsRemount) { size(); return; }
+      args = incoming;
+      renderedScene = scene;
+      renderedRefresh = refresh;
+      stage.style.width = `${args.width || 320}px`;
+      stage.style.height = `${args.height || 320}px`;
+      const ticket = ++mountTicket;
+      frame.onload = () => mountOverlays(ticket);
+      frame.src = args.image || '';
+      if (frame.complete && frame.naturalWidth) requestAnimationFrame(() => mountOverlays(ticket));
+    }
+    savePos.addEventListener('click', event => { event.preventDefault(); event.stopPropagation(); serialize(); });
     window.addEventListener('message', event => { if (event.data && event.data.type === 'streamlit:render') render(event.data.args || {}); });
     ready();
   </script>
