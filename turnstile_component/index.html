@@ -3,7 +3,6 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <script src="https://unpkg.com/streamlit-component-lib@1.6.0/dist/streamlit.js"></script>
   <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
   <style>
     html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
@@ -13,6 +12,43 @@
 <body>
   <div id="turnstile"></div>
   <script>
+    // Minimal Streamlit component bridge. Keeping it in this file avoids a
+    // broken third-party component-library URL in Streamlit Cloud.
+    const Streamlit = {
+      RENDER_EVENT: "streamlit:render",
+      events: new EventTarget(),
+      registered: false,
+      lastHeight: null,
+      send(type, data) {
+        window.parent.postMessage({ isStreamlitMessage: true, type, ...data }, "*");
+      },
+      setComponentReady() {
+        if (!this.registered) {
+          window.addEventListener("message", (event) => {
+            if (event?.data?.type !== this.RENDER_EVENT) return;
+            this.events.dispatchEvent(new CustomEvent(this.RENDER_EVENT, {
+              detail: {
+                args: event.data.args || {},
+                disabled: Boolean(event.data.disabled),
+                theme: event.data.theme || {},
+              },
+            }));
+          });
+          this.registered = true;
+        }
+        this.send("streamlit:componentReady", { apiVersion: 1 });
+      },
+      setFrameHeight(height) {
+        const nextHeight = height || document.body.scrollHeight || 78;
+        if (nextHeight === this.lastHeight) return;
+        this.lastHeight = nextHeight;
+        this.send("streamlit:setFrameHeight", { height: nextHeight });
+      },
+      setComponentValue(value) {
+        this.send("streamlit:setComponentValue", { value, dataType: "json" });
+      },
+    };
+
     let activeSiteKey = "";
     let widgetId = null;
 
@@ -29,9 +65,14 @@
         sitekey: siteKey,
         theme: "dark",
         size: "normal",
+        appearance: "always",
         callback: (token) => Streamlit.setComponentValue(token),
         "expired-callback": () => Streamlit.setComponentValue(""),
-        "error-callback": () => Streamlit.setComponentValue(""),
+        "error-callback": () => {
+          holder.textContent = "Human verification could not load. Please refresh the page.";
+          Streamlit.setComponentValue("");
+          Streamlit.setFrameHeight(100);
+        },
       });
       Streamlit.setFrameHeight(78);
     }
@@ -44,4 +85,3 @@
   </script>
 </body>
 </html>
-
