@@ -16,7 +16,7 @@
   </style>
 </head>
 <body>
-  <div id="stage"><img id="frame" alt="Paused video frame" /><button id="savePos" type="button">Save</button></div>
+  <div id="stage"><img id="frame" alt="Paused video frame" /><button id="savePos" type="button">သိမ်းမယ်</button></div>
   <script>
     const stage = document.getElementById('stage');
     const frame = document.getElementById('frame');
@@ -54,7 +54,7 @@
     function mountDrag(el, mode) {
       el.addEventListener('pointerdown', event => { event.preventDefault(); el.setPointerCapture(event.pointerId); const rect = el.getBoundingClientRect(); active = { el, mode: mode === 'blur' && event.offsetX > el.clientWidth - 28 && event.offsetY > el.clientHeight - 28 ? 'resize' : 'move', startX: event.clientX, startY: event.clientY, x: Number(el.dataset.x || 0), y: Number(el.dataset.y || 0), w: Number(el.dataset.w || rect.width), h: Number(el.dataset.h || rect.height) }; });
       el.addEventListener('pointermove', event => { if (!active || active.el !== el) return; const dx = event.clientX - active.startX, dy = event.clientY - active.startY; if (active.mode === 'resize') { el.dataset.w = clamp(active.w + dx, 24, stage.clientWidth - active.x); el.dataset.h = clamp(active.h + dy, 24, stage.clientHeight - active.y); } else { el.dataset.x = clamp(active.x + dx, 0, stage.clientWidth - el.offsetWidth); el.dataset.y = clamp(active.y + dy, 0, stage.clientHeight - el.offsetHeight); } apply(el); writeDraft(); });
-      el.addEventListener('pointerup', () => { if (active && active.el === el) { active = null; writeDraft(); serialize(); } });
+      el.addEventListener('pointerup', () => { if (active && active.el === el) { active = null; writeDraft(); } });
       el.addEventListener('pointercancel', () => { if (active && active.el === el) active = null; });
     }
     function apply(el) { el.style.left = `${el.dataset.x}px`; el.style.top = `${el.dataset.y}px`; if (el.dataset.w) el.style.width = `${el.dataset.w}px`; if (el.dataset.h) el.style.height = `${el.dataset.h}px`; }
@@ -91,5 +91,4 @@
     ready();
   </script>
 </body>
-  </html>
-
+</html>
