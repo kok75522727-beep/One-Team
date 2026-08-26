@@ -59,13 +59,14 @@
     }
     function apply(el) { el.style.left = `${el.dataset.x}px`; el.style.top = `${el.dataset.y}px`; if (el.dataset.w) el.style.width = `${el.dataset.w}px`; if (el.dataset.h) el.style.height = `${el.dataset.h}px`; }
     function blur(mask, index, draft = null) { const sx = stage.clientWidth / Number(args.source_width || args.width || 1), sy = stage.clientHeight / Number(args.source_height || args.height || 1); const el = document.createElement('div'); el.className = 'blur'; el.dataset.x = draft ? clamp(Number(draft.x || 0) * stage.clientWidth, 0, stage.clientWidth - 24) : Number(mask.x || 0) * sx; el.dataset.y = draft ? clamp(Number(draft.y || 0) * stage.clientHeight, 0, stage.clientHeight - 24) : Number(mask.y || 0) * sy; el.dataset.w = draft ? clamp(Number(draft.width || 0.1) * stage.clientWidth, 24, stage.clientWidth - Number(el.dataset.x)) : Math.max(24, Number(mask.width || 1) * sx); el.dataset.h = draft ? clamp(Number(draft.height || 0.1) * stage.clientHeight, 24, stage.clientHeight - Number(el.dataset.y)) : Math.max(24, Number(mask.height || 1) * sy); el.innerHTML = `<span class="tag">Blur ${index + 1}</span>`; apply(el); mountDrag(el, 'blur'); stage.appendChild(el); }
-    function subtitle(data, draft = null) { const el = document.createElement('div'); el.id = 'subtitle'; el.textContent = data.text || 'စာတန်းထိုး နေရာ'; el.style.color = data.color || '#FFD166'; el.style.fontSize = `${clamp(Number(data.size || 30) * stage.clientHeight / Number(args.height || 1), 14, 32)}px`; stage.appendChild(el); const x = draft ? Number(draft.x || 0) * stage.clientWidth + el.offsetWidth / 2 : Number(data.x || 50) * stage.clientWidth / 100; const y = draft ? Number(draft.y || 0) * stage.clientHeight + el.offsetHeight / 2 : Number(data.y || 78) * stage.clientHeight / 100; el.dataset.x = clamp(x - el.offsetWidth / 2, 0, stage.clientWidth - el.offsetWidth); el.dataset.y = clamp(y - el.offsetHeight / 2, 0, stage.clientHeight - el.offsetHeight); apply(el); mountDrag(el, 'subtitle'); }
+    function subtitle(data, draft = null) { const el = document.createElement('div'); el.id = 'subtitle'; el.textContent = data.text || 'စာတန်းထိုး နေရာ'; el.style.color = data.color || '#FFD166'; el.style.fontFamily = `${data.font || 'Noto Sans Myanmar'}, sans-serif`; el.style.fontSize = `${clamp(Number(data.size || 30) * stage.clientHeight / Number(args.height || 1), 14, 32)}px`; stage.appendChild(el); const x = draft ? Number(draft.x || 0) * stage.clientWidth + el.offsetWidth / 2 : Number(data.x || 50) * stage.clientWidth / 100; const y = draft ? Number(draft.y || 0) * stage.clientHeight + el.offsetHeight / 2 : Number(data.y || 78) * stage.clientHeight / 100; el.dataset.x = clamp(x - el.offsetWidth / 2, 0, stage.clientWidth - el.offsetWidth); el.dataset.y = clamp(y - el.offsetHeight / 2, 0, stage.clientHeight - el.offsetHeight); apply(el); mountDrag(el, 'subtitle'); }
     function syncSubtitleAppearance() {
       const el = document.getElementById('subtitle');
       if (!el || !args.subtitle) return;
       const data = args.subtitle;
       el.textContent = data.text || 'စာတန်းထိုး နေရာ';
       el.style.color = data.color || '#FFD166';
+      el.style.fontFamily = `${data.font || 'Noto Sans Myanmar'}, sans-serif`;
       const scaledSize = Number(data.size || 30) * stage.clientWidth / 720;
       el.style.fontSize = `${clamp(scaledSize, 10, 42)}px`;
     }
@@ -92,3 +93,4 @@
   </script>
 </body>
 </html>
+
