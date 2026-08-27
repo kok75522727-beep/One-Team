@@ -103,10 +103,13 @@
       if (sourceChanged) { videoFrame.onloadedmetadata = () => mountOverlays(ticket); videoFrame.dataset.editorSource = args.video || ''; videoFrame.src = args.video || ''; videoFrame.load(); if (videoFrame.readyState >= 1) requestAnimationFrame(() => mountOverlays(ticket)); }
       else { requestAnimationFrame(() => mountOverlays(ticket)); }
     }
-    exportNow.addEventListener('click', () => { writeDraft(); serialize(true, { export_requested: true }); });
+    exportNow.addEventListener('click', () => {
+      writeDraft();
+      const exportRequestId = `overlay-export-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      serialize(true, { export_requested: true, export_request_id: exportRequestId });
+    });
     window.addEventListener('message', event => { if (event.data && event.data.type === 'streamlit:render') render(event.data.args || {}); });
     ready();
   </script>
 </body>
 </html>
-
