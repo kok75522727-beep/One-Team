@@ -8,19 +8,21 @@
     html, body { margin: 0; padding: 0; background: transparent; font-family: system-ui, sans-serif; overflow: hidden; }
     #stage { position: relative; width: 100%; min-height: 280px; overflow: hidden; border-radius: 12px; background: #0a1222; touch-action: none; user-select: none; }
     #videoFrame { display: block; width: 100%; height: 100%; object-fit: contain; background: #050914; pointer-events: auto; }
+    #exportNow { display:block; width:100%; margin:8px 0 0; min-height:40px; border:1px solid #70c8ff; border-radius:9px; background:linear-gradient(135deg,#1d78e8,#6f3fff); color:#fff; font-weight:800; font-size:14px; touch-action:manipulation; }
     .blur { position: absolute; border: 2px dashed rgba(255,255,255,.72); background: rgba(9,16,30,.12); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-radius: 3px; touch-action: none; cursor: move; }
     .blur::after { content: ''; position: absolute; right: -8px; bottom: -8px; width: 15px; height: 15px; border-radius: 50%; background: #ffd166; border: 2px solid #112; cursor: nwse-resize; }
     #subtitle { position: absolute; max-width: 88%; padding: 3px 7px; border: 2px dashed #ffd166; border-radius: 4px; color: #ffd166; font-weight: 800; text-align: center; text-shadow: 2px 2px 2px #000,-2px -2px 2px #000; touch-action: none; cursor: move; white-space: pre-wrap; line-height: 1.22; }
   </style>
 </head>
 <body>
-  <div id="stage"><video id="videoFrame" muted controls playsinline preload="metadata"></video></div>
+  <div id="stage"><video id="videoFrame" muted controls playsinline preload="metadata"></video></div><button id="exportNow" type="button">Export Video</button>
   <script>
     const stage = document.getElementById('stage');
     const videoFrame = document.getElementById('videoFrame');
+    const exportNow = document.getElementById('exportNow');
     let args = {}, active = null, lastValue = '', renderedScene = '', renderedRefresh = '', renderedSubtitlePosition = '', mounted = false, mountTicket = 0, loadedFontUrl = '', activeFontFamily = '', fontRevision = 0;
     const send = (type, data = {}) => window.parent.postMessage({ isStreamlitMessage: true, type, ...data }, '*');
-    const size = () => send('streamlit:setFrameHeight', { height: Math.max(180, Math.ceil(stage.getBoundingClientRect().height)) });
+    const size = () => send('streamlit:setFrameHeight', { height: Math.max(180, Math.ceil(document.body.scrollHeight)) });
     const ready = () => send('streamlit:componentReady', { apiVersion: 1 });
     const clamp = (v, low, high) => Math.max(low, Math.min(high, v));
     function visibleVideoRect() {
@@ -31,7 +33,7 @@
       return { left: (stageWidth - width) / 2, top: (stageHeight - height) / 2, width, height };
     }
     function stageBounds() { return { left: 0, top: 0, width: Math.max(1, stage.clientWidth), height: Math.max(1, stage.clientHeight) }; }
-    function serialize(notify = true) {
+    function serialize(notify = true, extra = {}) {
       const width = Number(args.source_width || args.width || 1), height = Number(args.source_height || args.height || 1);
       const videoRect = visibleVideoRect();
       const masks = [...stage.querySelectorAll('.blur')].map(el => ({
@@ -41,7 +43,7 @@
         height: Math.round(Number(el.dataset.h || 1) * height / videoRect.height),
       }));
       const subtitle = document.getElementById('subtitle');
-      const result = { blur_masks: masks, subtitle: subtitle ? { x: Math.round((Number(subtitle.dataset.x || 0) + subtitle.offsetWidth / 2) * 100 / stage.clientWidth), y: Math.round((Number(subtitle.dataset.y || 0) + subtitle.offsetHeight / 2) * 100 / stage.clientHeight) } : null };
+      const result = { blur_masks: masks, subtitle: subtitle ? { x: Math.round((Number(subtitle.dataset.x || 0) + subtitle.offsetWidth / 2) * 100 / stage.clientWidth), y: Math.round((Number(subtitle.dataset.y || 0) + subtitle.offsetHeight / 2) * 100 / stage.clientHeight) } : null, ...extra };
       const encoded = JSON.stringify(result);
       if (encoded !== lastValue) { lastValue = encoded; if (notify) send('streamlit:setComponentValue', { value: result, dataType: 'json' }); }
     }
@@ -61,7 +63,7 @@
     function mountDrag(el, mode) {
       el.addEventListener('pointerdown', event => { event.preventDefault(); el.setPointerCapture(event.pointerId); const rect = el.getBoundingClientRect(), bounds = mode === 'blur' ? visibleVideoRect() : stageBounds(); active = { el, mode: mode === 'blur' && event.offsetX > el.clientWidth - 28 && event.offsetY > el.clientHeight - 28 ? 'resize' : 'move', startX: event.clientX, startY: event.clientY, x: Number(el.dataset.x || 0), y: Number(el.dataset.y || 0), w: Number(el.dataset.w || rect.width), h: Number(el.dataset.h || rect.height), bounds }; });
       el.addEventListener('pointermove', event => { if (!active || active.el !== el) return; const dx = event.clientX - active.startX, dy = event.clientY - active.startY, bounds = active.bounds; if (active.mode === 'resize') { el.dataset.w = clamp(active.w + dx, 24, bounds.left + bounds.width - active.x); el.dataset.h = clamp(active.h + dy, 24, bounds.top + bounds.height - active.y); } else { el.dataset.x = clamp(active.x + dx, bounds.left, bounds.left + bounds.width - el.offsetWidth); el.dataset.y = clamp(active.y + dy, bounds.top, bounds.top + bounds.height - el.offsetHeight); } apply(el); writeDraft(); });
-      const finish = () => { if (active && active.el === el) { active = null; writeDraft(); serialize(); } };
+      const finish = () => { if (active && active.el === el) { active = null; writeDraft(); } };
       el.addEventListener('pointerup', finish);
       el.addEventListener('pointercancel', finish);
       el.addEventListener('lostpointercapture', finish);
@@ -101,8 +103,10 @@
       if (sourceChanged) { videoFrame.onloadedmetadata = () => mountOverlays(ticket); videoFrame.dataset.editorSource = args.video || ''; videoFrame.src = args.video || ''; videoFrame.load(); if (videoFrame.readyState >= 1) requestAnimationFrame(() => mountOverlays(ticket)); }
       else { requestAnimationFrame(() => mountOverlays(ticket)); }
     }
+    exportNow.addEventListener('click', () => { writeDraft(); serialize(true, { export_requested: true }); });
     window.addEventListener('message', event => { if (event.data && event.data.type === 'streamlit:render') render(event.data.args || {}); });
     ready();
   </script>
 </body>
 </html>
+
