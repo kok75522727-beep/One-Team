@@ -6,21 +6,19 @@
   <style>
     * { box-sizing: border-box; }
     html, body { margin: 0; padding: 0; background: transparent; font-family: system-ui, sans-serif; overflow: hidden; }
-    #stage { position: relative; width: 100%; overflow: hidden; border-radius: 12px; background: #0a1222; touch-action: none; user-select: none; }
-    #videoFrame { display: block; width: 100%; height: 100%; object-fit: contain; background: #050914; pointer-events: none; }
+    #stage { position: relative; width: 100%; min-height: 280px; overflow: hidden; border-radius: 12px; background: #0a1222; touch-action: none; user-select: none; }
+    #videoFrame { display: block; width: 100%; height: 100%; object-fit: contain; background: #050914; pointer-events: auto; }
     .blur { position: absolute; border: 3px solid #66d8ff; background: rgba(79,171,255,.18); border-radius: 3px; touch-action: none; cursor: move; }
     .blur::after { content: ''; position: absolute; right: -8px; bottom: -8px; width: 15px; height: 15px; border-radius: 50%; background: #ffd166; border: 2px solid #112; cursor: nwse-resize; }
     #subtitle { position: absolute; max-width: 88%; padding: 3px 7px; border: 2px dashed #ffd166; border-radius: 4px; color: #ffd166; font-weight: 800; text-align: center; text-shadow: 2px 2px 2px #000,-2px -2px 2px #000; touch-action: none; cursor: move; white-space: pre-wrap; line-height: 1.22; }
     .tag { position: absolute; left: 4px; top: 4px; padding: 2px 6px; border-radius: 8px; font-size: 10px; color: #06101a; background: #66d8ff; font-weight: 800; }
-    #savePos { position: absolute; right: 8px; top: 8px; z-index: 20; min-height: 32px; border: 1px solid rgba(255,255,255,.42); border-radius: 999px; padding: 5px 10px; background: rgba(7,16,31,.82); color: #e6f7ff; font-size: 12px; font-weight: 800; touch-action: manipulation; }
   </style>
 </head>
 <body>
-  <div id="stage"><video id="videoFrame" muted autoplay loop playsinline preload="auto"></video><button id="savePos" type="button">သိမ်းမယ်</button></div>
+  <div id="stage"><video id="videoFrame" muted controls playsinline preload="metadata"></video></div>
   <script>
     const stage = document.getElementById('stage');
     const videoFrame = document.getElementById('videoFrame');
-    const savePos = document.getElementById('savePos');
     let args = {}, active = null, lastValue = '', renderedScene = '', renderedRefresh = '', mounted = false, mountTicket = 0, loadedFontUrl = '', activeFontFamily = '', fontRevision = 0;
     const send = (type, data = {}) => window.parent.postMessage({ isStreamlitMessage: true, type, ...data }, '*');
     const size = () => send('streamlit:setFrameHeight', { height: Math.max(180, Math.ceil(stage.getBoundingClientRect().height)) });
@@ -64,8 +62,10 @@
     function mountDrag(el, mode) {
       el.addEventListener('pointerdown', event => { event.preventDefault(); el.setPointerCapture(event.pointerId); const rect = el.getBoundingClientRect(), bounds = mode === 'blur' ? visibleVideoRect() : stageBounds(); active = { el, mode: mode === 'blur' && event.offsetX > el.clientWidth - 28 && event.offsetY > el.clientHeight - 28 ? 'resize' : 'move', startX: event.clientX, startY: event.clientY, x: Number(el.dataset.x || 0), y: Number(el.dataset.y || 0), w: Number(el.dataset.w || rect.width), h: Number(el.dataset.h || rect.height), bounds }; });
       el.addEventListener('pointermove', event => { if (!active || active.el !== el) return; const dx = event.clientX - active.startX, dy = event.clientY - active.startY, bounds = active.bounds; if (active.mode === 'resize') { el.dataset.w = clamp(active.w + dx, 24, bounds.left + bounds.width - active.x); el.dataset.h = clamp(active.h + dy, 24, bounds.top + bounds.height - active.y); } else { el.dataset.x = clamp(active.x + dx, bounds.left, bounds.left + bounds.width - el.offsetWidth); el.dataset.y = clamp(active.y + dy, bounds.top, bounds.top + bounds.height - el.offsetHeight); } apply(el); writeDraft(); });
-      el.addEventListener('pointerup', () => { if (active && active.el === el) { active = null; writeDraft(); serialize(); } });
-      el.addEventListener('pointercancel', () => { if (active && active.el === el) active = null; });
+      const finish = () => { if (active && active.el === el) { active = null; writeDraft(); serialize(); } };
+      el.addEventListener('pointerup', finish);
+      el.addEventListener('pointercancel', finish);
+      el.addEventListener('lostpointercapture', finish);
     }
     function apply(el) { el.style.left = `${el.dataset.x}px`; el.style.top = `${el.dataset.y}px`; if (el.dataset.w) el.style.width = `${el.dataset.w}px`; if (el.dataset.h) el.style.height = `${el.dataset.h}px`; }
     function blur(mask, index, draft = null) { const rect = visibleVideoRect(), sx = rect.width / Number(args.source_width || args.width || 1), sy = rect.height / Number(args.source_height || args.height || 1); const el = document.createElement('div'); el.className = 'blur'; el.dataset.x = draft ? clamp(rect.left + Number(draft.x || 0) * rect.width, rect.left, rect.left + rect.width - 24) : rect.left + Number(mask.x || 0) * sx; el.dataset.y = draft ? clamp(rect.top + Number(draft.y || 0) * rect.height, rect.top, rect.top + rect.height - 24) : rect.top + Number(mask.y || 0) * sy; el.dataset.w = draft ? clamp(Number(draft.width || 0.1) * rect.width, 24, rect.left + rect.width - Number(el.dataset.x)) : Math.max(24, Number(mask.width || 1) * sx); el.dataset.h = draft ? clamp(Number(draft.height || 0.1) * rect.height, 24, rect.top + rect.height - Number(el.dataset.y)) : Math.max(24, Number(mask.height || 1) * sy); el.innerHTML = `<span class="tag">Blur ${index + 1}</span>`; apply(el); mountDrag(el, 'blur'); stage.appendChild(el); }
@@ -82,7 +82,7 @@
       const scaledSize = Number(data.render_size || data.size || 30) * stage.clientWidth / Number(data.reference_width || 720);
       el.style.fontSize = `${clamp(scaledSize, 14, 48)}px`;
     }
-    function mountOverlays(ticket) { if (ticket !== mountTicket) return; stage.querySelectorAll('.blur,#subtitle').forEach(el => el.remove()); const draft = readDraft() || {}; if (args.blur_enabled) (args.blur_masks || []).forEach((mask, index) => blur(mask, index, (draft.blur_masks || [])[index])); if (args.subtitle_enabled) subtitle(args.subtitle || {}, draft.subtitle); mounted = true; size(); }
+    function mountOverlays(ticket) { if (ticket !== mountTicket) return; stage.querySelectorAll('.blur,#subtitle').forEach(el => el.remove()); const draft = readDraft() || {}; if (args.blur_enabled) (args.blur_masks || []).forEach((mask, index) => blur(mask, index, (draft.blur_masks || [])[index])); if (args.subtitle_enabled) subtitle(args.subtitle || {}, draft.subtitle); mounted = true; size(); serialize(); }
     function render(next) {
       const incoming = next || {};
       const scene = String(incoming.scene_key || '');
@@ -92,16 +92,15 @@
       if (!needsRemount) { syncSubtitleAppearance(); size(); return; }
       renderedScene = scene;
       renderedRefresh = refresh;
-      stage.style.width = `${args.width || 320}px`;
-      stage.style.height = `${args.height || 320}px`;
+      stage.style.width = '100%';
+      stage.style.height = 'auto';
+      stage.style.aspectRatio = `${args.width || 9} / ${args.height || 16}`;
       const ticket = ++mountTicket;
       videoFrame.onloadedmetadata = () => mountOverlays(ticket);
       videoFrame.src = args.video || '';
       videoFrame.load();
-      videoFrame.play().catch(() => {});
       if (videoFrame.readyState >= 1) requestAnimationFrame(() => mountOverlays(ticket));
     }
-    savePos.addEventListener('click', event => { event.preventDefault(); event.stopPropagation(); writeDraft(); serialize(); });
     window.addEventListener('message', event => { if (event.data && event.data.type === 'streamlit:render') render(event.data.args || {}); });
     ready();
   </script>
